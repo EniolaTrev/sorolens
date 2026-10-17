@@ -9,6 +9,8 @@ sorolens track CONTRACT_ID --network testnet`;
 const apiQuickstart =
   "curl --fail-with-body 'https://api.sorolens.xyz/api/v1/contracts?limit=10'";
 
+export const revalidate = 60;
+
 const features = [
   {
     title: "Contract Event Indexing",
