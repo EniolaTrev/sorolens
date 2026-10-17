@@ -5,6 +5,13 @@ test("contract detail renders header, stats and activity sections", async ({
   page,
 }) => {
   await mockApi(page);
+  const trendRequests: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.endsWith("/resource-trend")) {
+      trendRequests.push(url.href);
+    }
+  });
   await page.goto(`/contracts/${CONTRACT_ID}`);
 
   await expectHeading(page, CONTRACT_ID.slice(0, 8), { exact: false });
@@ -14,6 +21,11 @@ test("contract detail renders header, stats and activity sections", async ({
   await expect(page.getByRole("heading", { name: "Activity" })).toBeVisible();
   await expect(page.getByText("Event Volume")).toBeVisible();
   await expect(page.getByText("Invocations").first()).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Resource usage trend" })
+  ).toBeVisible();
+  await expect(page.getByText("Avg CPU (insn)")).toBeVisible();
+  expect(trendRequests).toHaveLength(1);
 });
 
 test("contract detail renders Events and Storage TTL sections", async ({
