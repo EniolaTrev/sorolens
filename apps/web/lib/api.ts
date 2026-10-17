@@ -57,6 +57,7 @@ import type {
 } from "./types";
 import type { ContractVersionEntry } from "@sorolens/ui";
 import { recordLastUpdated, resourceFromUrl } from "./lastUpdated";
+import { sessionHeaders } from "./user";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
@@ -155,8 +156,8 @@ export function trackContract(
 ): Promise<ContractSummary> {
   const headers: Record<string, string> = {};
   // RBAC: registering a contract requires a recognized (contributor+) user,
-  // so the UI forwards its browser identity the same way the watchlist does.
-  if (userId) headers["X-User-ID"] = userId;
+  // so the UI sends its signed session token.
+  Object.assign(headers, sessionHeaders(userId));
   return fetchJson<ContractSummary>(`${API_URL}/api/v1/contracts`, {
     method: "POST",
     body: JSON.stringify(req),
@@ -165,14 +166,14 @@ export function trackContract(
 }
 
 // batchContracts applies one bulk action (untrack | tag) to many contracts.
-// Like trackContract it forwards the browser identity so the API's RBAC layer
-// can require the contributor role.
+// Like trackContract it sends the signed session so the API's RBAC layer can
+// require the contributor role.
 export function batchContracts(
   req: BatchContractsRequest,
   userId?: string
 ): Promise<BatchContractsResponse> {
   const headers: Record<string, string> = {};
-  if (userId) headers["X-User-ID"] = userId;
+  Object.assign(headers, sessionHeaders(userId));
   return fetchJson<BatchContractsResponse>(
     `${API_URL}/api/v1/contracts/batch`,
     {
@@ -205,7 +206,7 @@ export function addContractTag(
     {
       method: "POST",
       body: JSON.stringify({ tag }),
-      headers: { "X-User-ID": userId },
+      headers: sessionHeaders(userId),
     }
   );
 }
@@ -220,7 +221,7 @@ export function removeContractTag(
     `${API_URL}/api/v1/contracts/${id}/tags/${encodeURIComponent(tag)}`,
     {
       method: "DELETE",
-      headers: { "X-User-ID": userId },
+      headers: sessionHeaders(userId),
     }
   );
 }
@@ -657,10 +658,10 @@ export function listAllEvents(
 
 // ---- subscriptions --------------------------------------------------------
 // Subscriptions hold integration secrets, so every call needs a contributor
-// identity; the dashboard forwards its browser user ID like trackContract.
+// identity; the dashboard sends its signed session like trackContract.
 
 function userHeaders(userId?: string): Record<string, string> {
-  return userId ? { "X-User-ID": userId } : {};
+  return sessionHeaders(userId);
 }
 
 export function createSubscription(
@@ -718,7 +719,7 @@ export function addToWatchlist(
   return fetchJson<WatchlistStatusResponse>(`${API_URL}/api/v1/watchlist`, {
     method: "POST",
     body: JSON.stringify({ contract_id: contractId }),
-    headers: { "X-User-ID": userId },
+    headers: sessionHeaders(userId),
   });
 }
 
@@ -730,14 +731,14 @@ export function removeFromWatchlist(
     `${API_URL}/api/v1/watchlist/${contractId}`,
     {
       method: "DELETE",
-      headers: { "X-User-ID": userId },
+      headers: sessionHeaders(userId),
     }
   );
 }
 
 export function listWatchlist(userId: string): Promise<WatchlistResponse> {
   return fetchJson<WatchlistResponse>(`${API_URL}/api/v1/watchlist`, {
-    headers: { "X-User-ID": userId },
+    headers: sessionHeaders(userId),
   });
 }
 
@@ -747,18 +748,18 @@ export function watchlistStatus(
 ): Promise<WatchlistStatusResponse> {
   return fetchJson<WatchlistStatusResponse>(
     `${API_URL}/api/v1/watchlist/${contractId}/status`,
-    { headers: { "X-User-ID": userId } }
+    { headers: sessionHeaders(userId) }
   );
 }
 
 // ---- groups (contract portfolios) ------------------------------------------
 //
-// Groups are owned by the X-User-ID caller, the same identity contract the
-// watchlist uses, so every call forwards the browser identity header.
+// Groups are owned by the session user, the same identity contract the
+// watchlist uses, so every call sends the signed session.
 
 export function listGroups(userId: string): Promise<GroupsListResponse> {
   return fetchJson<GroupsListResponse>(`${API_URL}/api/v1/groups`, {
-    headers: { "X-User-ID": userId },
+    headers: sessionHeaders(userId),
   });
 }
 
@@ -766,13 +767,13 @@ export function createGroup(name: string, userId: string): Promise<Group> {
   return fetchJson<Group>(`${API_URL}/api/v1/groups`, {
     method: "POST",
     body: JSON.stringify({ name }),
-    headers: { "X-User-ID": userId },
+    headers: sessionHeaders(userId),
   });
 }
 
 export function getGroup(id: string, userId: string): Promise<GroupDetail> {
   return fetchJson<GroupDetail>(`${API_URL}/api/v1/groups/${id}`, {
-    headers: { "X-User-ID": userId },
+    headers: sessionHeaders(userId),
   });
 }
 
@@ -784,7 +785,7 @@ export function renameGroup(
   return fetchJson<Group>(`${API_URL}/api/v1/groups/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ name }),
-    headers: { "X-User-ID": userId },
+    headers: sessionHeaders(userId),
   });
 }
 
@@ -794,13 +795,13 @@ export function deleteGroup(
 ): Promise<GroupDeletedResponse> {
   return fetchJson<GroupDeletedResponse>(`${API_URL}/api/v1/groups/${id}`, {
     method: "DELETE",
-    headers: { "X-User-ID": userId },
+    headers: sessionHeaders(userId),
   });
 }
 
 export function getGroupStats(id: string, userId: string): Promise<GroupStats> {
   return fetchJson<GroupStats>(`${API_URL}/api/v1/groups/${id}/stats`, {
-    headers: { "X-User-ID": userId },
+    headers: sessionHeaders(userId),
   });
 }
 
@@ -814,7 +815,7 @@ export function addContractToGroup(
     {
       method: "POST",
       body: JSON.stringify({ contract_id: contractId }),
-      headers: { "X-User-ID": userId },
+      headers: sessionHeaders(userId),
     }
   );
 }
@@ -828,7 +829,7 @@ export function removeContractFromGroup(
     `${API_URL}/api/v1/groups/${groupId}/contracts/${contractId}`,
     {
       method: "DELETE",
-      headers: { "X-User-ID": userId },
+      headers: sessionHeaders(userId),
     }
   );
 }
@@ -852,7 +853,7 @@ export function listRules(): Promise<RulesResponse> {
 }
 
 // Rule authoring mutates shared state, so the API requires a contributor
-// identity; userId is forwarded as X-User-ID (see lib/user.ts).
+// identity; userId selects the session token (see lib/user.ts).
 export function createRule(
   req: CreateRuleRequest,
   userId?: string
@@ -860,14 +861,14 @@ export function createRule(
   return fetchJson<AlertRule>(`${API_URL}/api/v1/rules`, {
     method: "POST",
     body: JSON.stringify(req),
-    headers: userId ? { "X-User-ID": userId } : undefined,
+    headers: sessionHeaders(userId),
   });
 }
 
 export function deleteRule(id: number, userId?: string): Promise<void> {
   return fetchNoContent(`${API_URL}/api/v1/rules/${id}`, {
     method: "DELETE",
-    headers: userId ? { "X-User-ID": userId } : undefined,
+    headers: sessionHeaders(userId),
   });
 }
 
@@ -879,7 +880,7 @@ export function setRuleEnabled(
   return fetchJson<AlertRule>(`${API_URL}/api/v1/rules/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ enabled }),
-    headers: userId ? { "X-User-ID": userId } : undefined,
+    headers: sessionHeaders(userId),
   });
 }
 
@@ -929,7 +930,7 @@ export function listContractNotes(id: string): Promise<ContractNotesResponse> {
 
 /**
  * Adds a markdown note. Authoring requires a contributor identity, so the
- * browser identity is forwarded as X-User-ID like the tag and watchlist calls.
+ * browser identity is sent as a session token like the tag and watchlist calls.
  */
 export function createContractNote(
   id: string,
@@ -939,7 +940,7 @@ export function createContractNote(
   return fetchJson<ContractNote>(`${API_URL}/api/v1/contracts/${id}/notes`, {
     method: "POST",
     body: JSON.stringify({ body }),
-    headers: { "X-User-ID": userId },
+    headers: sessionHeaders(userId),
   });
 }
 
@@ -955,7 +956,7 @@ export function updateContractNote(
     {
       method: "PATCH",
       body: JSON.stringify({ body }),
-      headers: { "X-User-ID": userId },
+      headers: sessionHeaders(userId),
     }
   );
 }
@@ -970,7 +971,7 @@ export function deleteContractNote(
     `${API_URL}/api/v1/contracts/${contractId}/notes/${noteId}`,
     {
       method: "DELETE",
-      headers: { "X-User-ID": userId },
+      headers: sessionHeaders(userId),
     }
   );
 }
